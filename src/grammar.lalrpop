@@ -1,0 +1,75 @@
+use std::str::FromStr;
+use regex::Regex;
+use crate::ast::{Expression};
+use lalrpop_util::{ParseError, ErrorRecovery};
+
+// Define grammar
+grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, &'static str>>);
+
+// Define regex priority
+
+pub Expr: Box<Expression> = {
+    FloatLiteral =>? match <> {
+        Ok(nb) => Ok(Box::new(Expression::Float(nb))),
+        Err(e) => Err(e)
+    },
+    IntLiteral =>? match <> {
+        Ok(nb) => Ok(Box::new(Expression::Integer(nb))),
+        Err(e) => Err(e)
+    },
+    ! => {
+        println!("Hé houston, y'a un problème ici");
+        errors.push(<>);
+        Box::new(Expression::Error)
+    }
+};
+
+FloatLiteral: Result<f32, ParseError<usize, Token<'input>, &'static str>> = {
+    r"([0-9]+\.[0-9]+)" => f32::from_str(<>)
+        .map_err(|_| ParseError::User {
+            error: "Number is too big."
+        })
+}
+
+/// Number
+IntLiteral: Result<i32, ParseError<usize, Token<'input>, &'static str>> = {
+    // Parse numbers
+    // We have to do it manually because LALRPOP is still limited when options overlap
+    // each other. Here, the "0" at the beginning can be either a prefix "0x" or "0b", or 
+    // the beginning of a decimal number without a prefix.
+    // This can be simplified if LALRPOP implements word boundaries in regex
+    r"0x([0-9a-fA-F]+)|0b([0-1]+)|([0-9]+)" => {
+        let re = Regex::new(r"0x([0-9a-fA-F]+)|0b([0-1]+)|([0-9]+)").unwrap();
+        match re.captures(<>) {
+            Some(c) => {
+                // Hexadecimal
+                if let Some(m) = c.get(1) {
+                    i32::from_str_radix(m.as_str(), 16)
+                        .map_err(|_| ParseError::User {
+                            error: "Number is too big."
+                       })
+                }
+                // Binary
+                else if let Some(m) = c.get(2) {
+                    i32::from_str_radix(m.as_str(), 2)
+                        .map_err(|_| ParseError::User {
+                            error: "Number is too big."
+                        })
+                }
+                // Decimal integer
+                else if let Some(m) = c.get(3) {
+                    i32::from_str(m.as_str())
+                        .map_err(|_| ParseError::User {
+                            error: "Number is too big."
+                        })
+                }
+                // Should be impossible. If this occurs, then the regex module is flawed,
+                else {
+                    Err(ParseError::User{error: "Regex matched a non matching pattern"})
+                }
+            },
+            // Should be impossible. If this occurs, then there is a bug in LALRPOP
+            None => Err(ParseError::User{error: "LALRPOP executed a non matching pattern"})
+        }
+    }
+}
