@@ -13,7 +13,8 @@ file = { SOI ~ expression ~ EOI }
 // == Expressions ==
 // =================
 
-expression = { binary_operation | unary_operation }
+expression = { binary_operation }
+
 
 binary_operation = { unary_operation ~ (binary_operator ~ unary_operation)* }
 
@@ -23,7 +24,9 @@ unary_operation = {
     | term
 }
 
-term = {float | integer | bool | char | raw_string | string | function_call | identifier | "(" ~ expression ~ ")" }
+member_access = { identifier ~ ("." ~ member_access)? }
+
+term = {float | integer | bool | char | raw_string | string | function_call | member_access | "(" ~ expression ~ ")" }
 
 // == Literals ==
 
@@ -79,7 +82,6 @@ less_than = { "<" }
 greater_than = { ">" }
 equals = { "==" }
 different = { "!=" }
-member_access = { "." }
 
 binary_operator = _{
     exponent
@@ -96,7 +98,6 @@ binary_operator = _{
     | and
     | equals
     | different
-    | member_access
 }
 
 // Unary
@@ -129,7 +130,7 @@ function_parameters = {
     expression ~ ("," ~ expression)*
 }
 
-function_call = { identifier ~ "(" ~ function_parameters? ~ ")" }
+function_call = { member_access ~ "(" ~ function_parameters? ~ ")" }
 
 // ================
 // == Statements ==

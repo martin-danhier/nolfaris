@@ -1,1 +1,13 @@
-items.get("Amulette de l'Enfer").cooldown() > 3 or power.get(0).attack_power() * player.attack_power > target.get(NEAREST)
+
+/* LHE = EXPR;
+| EXPR;
+| if (EXPR) {
+|     [STMT]
+| }
+| else if (EXPR) {
+|     [STMT]
+| } else {
+|     [STMT]
+| }*/
+
+bob.bonjour.au_revoir()

@@ -47,8 +47,6 @@ lazy_static::lazy_static! {
                 | pcl::Operator::new(Rule::times, pcl::Assoc::Left),
             // exponent
             pcl::Operator::new(Rule::exponent, pcl::Assoc::Left),
-            // Misc
-            pcl::Operator::new(Rule::member_access, pcl::Assoc::Left),
         ]
     );
 }
@@ -182,8 +180,8 @@ impl NokeParser {
     pub fn function_call(input: Node) -> Result<Box<Expr>> {
         Ok(match_nodes!(
             input.into_children();
-            [identifier(id), function_parameters(params)] => Box::new(Expr::FunctionCall(Box::new(Expr::Identifier(id)), params)),
-            [identifier(id)] => Box::new(Expr::FunctionCall(Box::new(Expr::Identifier(id)), vec![])),
+            [member_access(id), function_parameters(params)] => Box::new(Expr::FunctionCall(id, params)),
+            [member_access(id)] => Box::new(Expr::FunctionCall(id, vec![])),
         ))
     }
 
@@ -225,7 +223,7 @@ impl NokeParser {
             [char(value)] => Box::new(Expr::Char(value)),
             [string(value)] => Box::new(Expr::String(value)),
             [raw_string(value)] => Box::new(Expr::String(value)),
-            [identifier(value)] => Box::new(Expr::Identifier(value)),
+            [member_access(expr)] => expr,
             [function_call(value)] => value,
         ))
     }
@@ -233,8 +231,6 @@ impl NokeParser {
     #[prec_climb(unary_operation, PRECCLIMBER)]
     pub fn binary_operation(l: Box<Expr>, op: Node, r: Box<Expr>) -> Result<Box<Expr>> {
         match op.as_rule() {
-            // Misc
-            Rule::member_access => Ok(Box::new(Expr::BinOp(l, BinOpcode::Nav, r))),
             // Math
             Rule::plus => Ok(Box::new(Expr::BinOp(l, BinOpcode::Add, r))),
             Rule::minus => Ok(Box::new(Expr::BinOp(l, BinOpcode::Sub, r))),
@@ -256,6 +252,19 @@ impl NokeParser {
         }
     }
 
+    pub fn member_access(input: Node) -> Result<Box<Expr>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [identifier(value)] => Box::new(Expr::Identifier(value)),
+            [identifier(l), member_access(r)] => Box::new(
+                Expr::BinOp(
+                    Box::new(Expr::Identifier(l)),
+                    BinOpcode::Nav,
+                    r,
+                )
+            ),
+        ))
+    }
 
     pub fn unary_operation(input: Node) -> Result<Box<Expr>> {
         Ok(match_nodes!(
@@ -269,7 +278,8 @@ impl NokeParser {
     pub fn expression(input: Node) -> Result<Box<Expr>> {
         Ok(match_nodes!(
             input.into_children();
-            [unary_operation(expr)] => expr,
+            // [member_access(expr)] => expr,
+            // [unary_operation(expr)] => expr,
             [binary_operation(expr)] => expr,
         ))
     }
