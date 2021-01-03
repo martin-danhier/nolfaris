@@ -1,13 +1,1 @@
-
-/* LHE = EXPR;
-| EXPR;
-| if (EXPR) {
-|     [STMT]
-| }
-| else if (EXPR) {
-|     [STMT]
-| } else {
-|     [STMT]
-| }*/
-
-bob.bonjour.au_revoir()
+int[1, 2, 3]

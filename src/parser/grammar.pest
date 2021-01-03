@@ -15,18 +15,13 @@ file = { SOI ~ expression ~ EOI }
 
 expression = { binary_operation }
 
-
 binary_operation = { unary_operation ~ (binary_operator ~ unary_operation)* }
 
 unary_operation = {
-    term ~ postfix_operator
-    | prefix_operator ~ term
-    | term
+    (prefix_operator)? ~ term ~ (postfix_operator)?
 }
 
-member_access = { identifier ~ ("." ~ member_access)? }
-
-term = {float | integer | bool | char | raw_string | string | function_call | member_access | "(" ~ expression ~ ")" }
+term = {float | integer | bool | char | raw_string | string | identifier  | "(" ~ expression ~ ")"}
 
 // == Literals ==
 
@@ -65,6 +60,12 @@ inner_raw_string = @{ (!("\"" ~ PEEK) ~ ANY)* }
 
 raw_string = ${ "r" ~ PUSH("#"*) ~ "\"" ~ inner_raw_string ~  "\"" ~ POP }
 
+// Function call
+
+expression_list = {
+    expression ~ ("," ~ expression)*
+}
+
 // == Operators ==
 
 // Binary
@@ -82,6 +83,8 @@ less_than = { "<" }
 greater_than = { ">" }
 equals = { "==" }
 different = { "!=" }
+nav = { "." }
+
 
 binary_operator = _{
     exponent
@@ -98,6 +101,7 @@ binary_operator = _{
     | and
     | equals
     | different
+    | nav
 }
 
 // Unary
@@ -106,6 +110,8 @@ not = _{ "not" }
 increment = _{ "++" }
 decrement = _{ "--" }
 type_of = _{"typeof"}
+call = { "(" ~ expression_list? ~ ")" }
+indexing = { "[" ~ expression_list? ~ "]" }
 
 prefix_operator = {
     decrement
@@ -118,19 +124,17 @@ prefix_operator = {
 postfix_operator = {
     decrement
     | increment
+    | call
+    | indexing
 }
 
 // Identifier
 
-identifier = @{ (ASCII_ALPHA | "_") ~ ( ASCII_ALPHANUMERIC | "_" )* }
-
-// Function call
-
-function_parameters = {
-    expression ~ ("," ~ expression)*
+identifier = @{ 
+    !("not" | "or" | "and" | "typeof" | "true" | "false") ~
+    (ASCII_ALPHA | "_") ~ ( ASCII_ALPHANUMERIC | "_" )* 
 }
 
-function_call = { member_access ~ "(" ~ function_parameters? ~ ")" }
 
 // ================
 // == Statements ==

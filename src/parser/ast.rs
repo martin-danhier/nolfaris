@@ -25,10 +25,12 @@ pub enum PrefixOpcode {
     Typeof, // "typeof"
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub enum PostfixOpcode {
     Increment, // ++
     Decrement, // --
+    Call(Vec<Box<Expr>>), // (a)
+    Indexing(Vec<Box<Expr>>) // [a]
 }
 
 /// Operator

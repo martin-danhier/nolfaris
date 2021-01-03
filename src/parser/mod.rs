@@ -47,6 +47,8 @@ lazy_static::lazy_static! {
                 | pcl::Operator::new(Rule::times, pcl::Assoc::Left),
             // exponent
             pcl::Operator::new(Rule::exponent, pcl::Assoc::Left),
+            // misc
+            pcl::Operator::new(Rule::nav, pcl::Assoc::Left),
         ]
     );
 }
@@ -97,7 +99,7 @@ impl NokeParser {
         match input.as_str() {
             "true" => Ok(true),
             "false" => Ok(false),
-            l => Err(input.error(format!("Invalid bool literal: \"{:?}\".", l)))
+            l => Err(input.error(format!("Invalid bool literal: \"{:?}\".", l))),
         }
     }
 
@@ -113,25 +115,31 @@ impl NokeParser {
                     Some('u') => {
                         // Get the digits
                         // They will always be 4 hexadecimal numbers because the grammar requires so
-                        let value= chars.by_ref().take(4).fold(0, |acc, c| acc * 16 + c.to_digit(16).unwrap());
+                        let value = chars
+                            .by_ref()
+                            .take(4)
+                            .fold(0, |acc, c| acc * 16 + c.to_digit(16).unwrap());
                         // Try to convert them
                         match std::char::from_u32(value) {
                             Some(c) => Ok(c),
-                            None => Err(input.error(format!("Invalid character: \"{}\".", input.as_str())))
+                            None => {
+                                Err(input
+                                    .error(format!("Invalid character: \"{}\".", input.as_str())))
+                            }
                         }
-                    },
+                    }
                     Some('b') => Ok('\x08'),
                     Some('f') => Ok('\x0c'),
                     Some('n') => Ok('\n'),
                     Some('r') => Ok('\r'),
                     Some('t') => Ok('\t'),
                     Some(c) => Ok(c),
-                    _ => Err(input.error(format!("Malformed escape: \"{}\"", input.as_str())))
+                    _ => Err(input.error(format!("Malformed escape: \"{}\"", input.as_str()))),
                 }
-            },
+            }
             // Normal chars
             Some(c) => Ok(c),
-            None => Err(input.error("Character rule matched an empty character."))
+            None => Err(input.error("Character rule matched an empty character.")),
         }
     }
 
@@ -171,26 +179,37 @@ impl NokeParser {
 
     // Identifier
 
-    pub fn identifier(input: Node) -> Result<String> {
-        Ok(String::from(input.as_str()))
+    pub fn identifier(input: Node) -> Result<Box<Expr>> {
+        Ok(Box::new(Expr::Identifier(String::from(input.as_str()))))
     }
 
-    // Function call
+    //  Function call and indexing
 
-    pub fn function_call(input: Node) -> Result<Box<Expr>> {
+    pub fn call(input: Node) -> Result<PostfixOpcode> {
         Ok(match_nodes!(
             input.into_children();
-            [member_access(id), function_parameters(params)] => Box::new(Expr::FunctionCall(id, params)),
-            [member_access(id)] => Box::new(Expr::FunctionCall(id, vec![])),
+            [expression_list(params)] => PostfixOpcode::Call(params),
+            [] => PostfixOpcode::Call(vec![])
         ))
     }
 
-    pub fn function_parameters(input: Node) -> Result<Vec<Box<Expr>>> {
+    pub fn indexing(input: Node) -> Result<PostfixOpcode> {
+        Ok(match_nodes!(
+            input.into_children();
+            [expression_list(params)] => PostfixOpcode::Indexing(params),
+            [] => PostfixOpcode::Indexing(vec![])
+        ))
+    }
+
+    pub fn expression_list(input: Node) -> Result<Vec<Box<Expr>>> {
         Ok(match_nodes!(
             input.into_children();
             [expression(exp)..] => exp.collect()
         ))
     }
+
+
+
 
     // Expressions
 
@@ -209,28 +228,33 @@ impl NokeParser {
         match input.as_str() {
             "++" => Ok(PostfixOpcode::Increment),
             "--" => Ok(PostfixOpcode::Decrement),
-            o => Err(input.error(format!("\"{:?}\" isn't an operator.", o)))?,
+            _ => {
+                Ok(match_nodes!(input.into_children();
+                    [call(op)] => op,
+                    [indexing(op)] => op,
+                ))
+            }
         }
     }
 
     pub fn term(input: Node) -> Result<Box<Expr>> {
         Ok(match_nodes!(
             input.into_children();
-            [expression(expr)] => expr,
-            [integer(nb)] => Box::new(Expr::Integer(nb)),
             [float(nb)] => Box::new(Expr::Float(nb)),
+            [integer(nb)] => Box::new(Expr::Integer(nb)),
+            [expression(expr)] => expr,
             [bool(value)] => Box::new(Expr::Bool(value)),
             [char(value)] => Box::new(Expr::Char(value)),
             [string(value)] => Box::new(Expr::String(value)),
             [raw_string(value)] => Box::new(Expr::String(value)),
-            [member_access(expr)] => expr,
-            [function_call(value)] => value,
+            [identifier(value)] => value,
         ))
     }
 
     #[prec_climb(unary_operation, PRECCLIMBER)]
     pub fn binary_operation(l: Box<Expr>, op: Node, r: Box<Expr>) -> Result<Box<Expr>> {
         match op.as_rule() {
+            Rule::nav => Ok(Box::new(Expr::BinOp(l, BinOpcode::Nav, r))),
             // Math
             Rule::plus => Ok(Box::new(Expr::BinOp(l, BinOpcode::Add, r))),
             Rule::minus => Ok(Box::new(Expr::BinOp(l, BinOpcode::Sub, r))),
@@ -252,25 +276,15 @@ impl NokeParser {
         }
     }
 
-    pub fn member_access(input: Node) -> Result<Box<Expr>> {
-        Ok(match_nodes!(
-            input.into_children();
-            [identifier(value)] => Box::new(Expr::Identifier(value)),
-            [identifier(l), member_access(r)] => Box::new(
-                Expr::BinOp(
-                    Box::new(Expr::Identifier(l)),
-                    BinOpcode::Nav,
-                    r,
-                )
-            ),
-        ))
-    }
-
     pub fn unary_operation(input: Node) -> Result<Box<Expr>> {
         Ok(match_nodes!(
             input.into_children();
+            // term
             [prefix_operator(op), term(t)] => Box::new(Expr::PrefixOp(op, t)),
             [term(t), postfix_operator(op)] => Box::new(Expr::PostfixOp(t, op)),
+            [prefix_operator(l), term(t), postfix_operator(r)] => Box::new(
+                Expr::PrefixOp(l, Box::new(Expr::PostfixOp(t, r)))
+            ),
             [term(t)] => t,
         ))
     }
@@ -278,7 +292,6 @@ impl NokeParser {
     pub fn expression(input: Node) -> Result<Box<Expr>> {
         Ok(match_nodes!(
             input.into_children();
-            // [member_access(expr)] => expr,
             // [unary_operation(expr)] => expr,
             [binary_operation(expr)] => expr,
         ))
@@ -287,7 +300,6 @@ impl NokeParser {
     // ================
     // == Statements ==
     // ================
-
 
     pub fn file(input: Node) -> Result<Box<Expr>> {
         Ok(match_nodes!(
