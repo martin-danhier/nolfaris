@@ -1,0 +1,137 @@
+// Define whitespace and comment. These will be skipped.
+WHITESPACE = _{ " " | "\r\n" | "\n" | "\r" }
+COMMENT = _{
+    ("//" ~ ( !"\n" ~ ANY)* ~ ("\n" | EOI))
+    | ("/*" ~ (!"*/" ~ ANY)* ~ "*/" )
+}
+
+// == Global rule ==
+
+file = { SOI ~ expression ~ EOI }
+
+// =================
+// == Expressions ==
+// =================
+
+expression = { binary_operation | unary_operation }
+
+binary_operation = { unary_operation ~ (binary_operator ~ unary_operation)* }
+
+unary_operation = {
+    term ~ postfix_operator
+    | prefix_operator ~ term
+    | term
+}
+
+term = {float | integer | bool | char | raw_string | string | function_call | identifier | "(" ~ expression ~ ")" }
+
+// == Literals ==
+
+// Integers
+dec_integer = @{ ASCII_DIGIT+ }
+hex_integer = @{ ASCII_HEX_DIGIT+ }
+bin_integer = @{ ASCII_BIN_DIGIT+ }
+integer = ${ "0x" ~ hex_integer | "0b" ~ bin_integer | dec_integer }
+
+// Floats
+float = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+
+// Booleans
+bool = { "true" | "false" }
+
+// Char
+
+character = @{
+    // Normal character
+    !("\"" | "\\") ~ ANY
+    // Escape sequence
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    // Unicode escape sequence
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+char = ${ "'" ~ character ~ "'" }
+
+// Strings
+
+inner_string = ${ character* }
+
+string = ${ "\"" ~ inner_string ~ "\"" }
+
+inner_raw_string = @{ (!("\"" ~ PEEK) ~ ANY)* }
+
+raw_string = ${ "r" ~ PUSH("#"*) ~ "\"" ~ inner_raw_string ~  "\"" ~ POP }
+
+// == Operators ==
+
+// Binary
+plus = { "+" }
+times = { "*" }
+minus = { "-" }
+div = { "/" }
+exponent = { "**" }
+modulo = { "%" }
+or = { "or" }
+and = { "and" }
+less_or_equal_to = { "<=" }
+greater_or_equal_to = { ">=" }
+less_than = { "<" }
+greater_than = { ">" }
+equals = { "==" }
+different = { "!=" }
+member_access = { "." }
+
+binary_operator = _{
+    exponent
+    | times
+    | div
+    | modulo
+    | plus
+    | minus
+    | less_or_equal_to
+    | greater_or_equal_to
+    | less_than
+    | greater_than
+    | or
+    | and
+    | equals
+    | different
+    | member_access
+}
+
+// Unary
+negation = _{ "-" }
+not = _{ "not" }
+increment = _{ "++" }
+decrement = _{ "--" }
+type_of = _{"typeof"}
+
+prefix_operator = {
+    decrement
+    | negation
+    | increment
+    | not
+    | type_of
+}
+
+postfix_operator = {
+    decrement
+    | increment
+}
+
+// Identifier
+
+identifier = @{ (ASCII_ALPHA | "_") ~ ( ASCII_ALPHANUMERIC | "_" )* }
+
+// Function call
+
+function_parameters = {
+    expression ~ ("," ~ expression)*
+}
+
+function_call = { identifier ~ "(" ~ function_parameters? ~ ")" }
+
+// ================
+// == Statements ==
+// ================
+
