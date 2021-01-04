@@ -1,1 +1,4 @@
-int[1, 2, 3]
+let a = 0;
+let b: int = 0;
+const c = 42.5;
+const c: int = 42;

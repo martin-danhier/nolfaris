@@ -8,7 +8,7 @@ pub enum Expr {
     Char(char),
     String(String),
     Identifier(String),
-    FunctionCall(Box<Expr>, Vec<Box<Expr>>),
+    Array(Vec<Box<Expr>>),
     // Binary operation
     BinOp(Box<Expr>, BinOpcode, Box<Expr>),
     // Unary operation
@@ -51,4 +51,18 @@ pub enum BinOpcode {
     Eq,  // ==
     Neq, // !=
     Nav, // .
+}
+
+/// Statement
+#[derive(Debug)]
+pub enum Statement {
+    Expression(Box<Expr>),
+    Assignment(Box<LeftHandSide>, Box<Expr>)
+}
+/// Statement
+#[derive(Debug)]
+pub enum LeftHandSide {
+    /// "var a : type". The type is optional. The declaration can be mutable or not
+    Declaration(Box<Expr>, Option<Box<Expr>>, bool),
+    Expression(Box<Expr>),
 }

@@ -7,7 +7,7 @@ COMMENT = _{
 
 // == Global rule ==
 
-file = { SOI ~ expression ~ EOI }
+file = { SOI ~ statement* ~ EOI }
 
 // =================
 // == Expressions ==
@@ -21,7 +21,8 @@ unary_operation = {
     (prefix_operator)? ~ term ~ (postfix_operator)?
 }
 
-term = {float | integer | bool | char | raw_string | string | identifier  | "(" ~ expression ~ ")"}
+term = {float | integer | bool | char | raw_string | string | identifier  | indexing | "(" ~ expression ~ ")"}
+
 
 // == Literals ==
 
@@ -130,9 +131,9 @@ postfix_operator = {
 
 // Identifier
 
-identifier = @{ 
-    !("not" | "or" | "and" | "typeof" | "true" | "false") ~
-    (ASCII_ALPHA | "_") ~ ( ASCII_ALPHANUMERIC | "_" )* 
+identifier = @{
+    !("not" | "or" | "and" | "typeof" | "true" | "false" | "let" | "mut") ~
+    (ASCII_ALPHA | "_") ~ ( ASCII_ALPHANUMERIC | "_" )*
 }
 
 
@@ -140,3 +141,23 @@ identifier = @{
 // == Statements ==
 // ================
 
+// Add it to a specific rule in order to get it in the error messages when it is missing
+semicolon = { ";" }
+
+statement = { (assignment | expression) ~ semicolon }
+
+// Assignments
+
+// What goes to the left of the =
+// An expression is too generic, a lot of matches will be invalid
+// They will be handled in the semantic analysis
+
+mutable = { "let" }
+immutable = { "const" }
+
+left_hand_side = {
+    ( mutable | immutable ) ~ identifier ~ (":" ~ expression)?
+    | expression
+}
+
+assignment = { left_hand_side ~ "=" ~ expression }

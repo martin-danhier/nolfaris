@@ -185,19 +185,19 @@ impl NokeParser {
 
     //  Function call and indexing
 
-    pub fn call(input: Node) -> Result<PostfixOpcode> {
+    pub fn call(input: Node) -> Result<Vec<Box<Expr>>> {
         Ok(match_nodes!(
             input.into_children();
-            [expression_list(params)] => PostfixOpcode::Call(params),
-            [] => PostfixOpcode::Call(vec![])
+            [expression_list(params)] => params,
+            [] => vec![],
         ))
     }
 
-    pub fn indexing(input: Node) -> Result<PostfixOpcode> {
+    pub fn indexing(input: Node) -> Result<Vec<Box<Expr>>> {
         Ok(match_nodes!(
             input.into_children();
-            [expression_list(params)] => PostfixOpcode::Indexing(params),
-            [] => PostfixOpcode::Indexing(vec![])
+            [expression_list(params)] => params,
+            [] => vec![]
         ))
     }
 
@@ -230,8 +230,8 @@ impl NokeParser {
             "--" => Ok(PostfixOpcode::Decrement),
             _ => {
                 Ok(match_nodes!(input.into_children();
-                    [call(op)] => op,
-                    [indexing(op)] => op,
+                    [call(op)] => PostfixOpcode::Call(op),
+                    [indexing(op)] => PostfixOpcode::Indexing(op),
                 ))
             }
         }
@@ -248,6 +248,7 @@ impl NokeParser {
             [string(value)] => Box::new(Expr::String(value)),
             [raw_string(value)] => Box::new(Expr::String(value)),
             [identifier(value)] => value,
+            [indexing(expr)] => Box::new(Expr::Array(expr)),
         ))
     }
 
@@ -301,15 +302,57 @@ impl NokeParser {
     // == Statements ==
     // ================
 
-    pub fn file(input: Node) -> Result<Box<Expr>> {
+    pub fn semicolon(input: Node) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn mutable(input: Node) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn immutable(input: Node) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn statement(input: Node) -> Result<Box<Statement>> {
         Ok(match_nodes!(
             input.into_children();
-            [expression(expr), _] => expr,
+            [assignment(stmt), _] => stmt,
+            [expression(expr), _] => Box::new(Statement::Expression(expr)),
+        ))
+    }
+
+    pub fn left_hand_side(input: Node) -> Result<Box<LeftHandSide>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [immutable(_), identifier(id), expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), false)),
+            [immutable(_), identifier(id)] => Box::new(LeftHandSide::Declaration(id, None, false)),
+            [mutable(_), identifier(id), expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), true)),
+            [mutable(_), identifier(id)] => Box::new(LeftHandSide::Declaration(id, None, true)),
+            [expression(expr)] => Box::new(LeftHandSide::Expression(expr)),
+        ))
+    }
+
+    pub fn assignment(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [left_hand_side(lhs), expression(expr)] => Box::new(Statement::Assignment(lhs, expr)),
+        ))
+    }
+
+    // =================
+    // == Global file ==
+    // =================
+
+    pub fn file(input: Node) -> Result<Vec<Box<Statement>>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [statement(stmt).., _] => stmt.collect(),
         ))
     }
 }
 
-pub fn parse_file(input_str: &str) -> Result<Box<Expr>> {
+pub fn parse_file(input_str: &str) -> Result<Vec<Box<Statement>>> {
     // Parse the input into `Nodes`
     let inputs = NokeParser::parse(Rule::file, input_str)?;
     // There should be a single root node in the parsed tree
