@@ -56,8 +56,14 @@ pub enum BinOpcode {
 /// Statement
 #[derive(Debug)]
 pub enum Statement {
-    Expression(Box<Expr>),
-    Assignment(Box<LeftHandSide>, Box<Expr>)
+    LeftHandSide(Box<LeftHandSide>),
+    Assignment(Box<LeftHandSide>, Box<Expr>),
+    Block(Vec<Box<Statement>>),
+    /// condition, if statement, else statement
+    Branch(Box<Expr>, Box<Statement>, Option<Box<Statement>>),
+    /// init, until, step, body
+    For(Box<Statement>, Box<Expr>, Box<Statement>, Box<Statement>),
+    ForEach(Box<LeftHandSide>, Box<Expr>, Box<Statement>),
 }
 /// Statement
 #[derive(Debug)]

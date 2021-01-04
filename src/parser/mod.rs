@@ -306,6 +306,20 @@ impl NokeParser {
         Ok(())
     }
 
+
+    pub fn statement(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [assignment(stmt), _] => stmt,
+            [left_hand_side(lhs), _] => Box::new(Statement::LeftHandSide(lhs)),
+            [block(b)] => b,
+            [branch(b)] => b,
+            [for_loop(stmt)] => stmt,
+        ))
+    }
+
+    // assignment
+
     pub fn mutable(input: Node) -> Result<()> {
         Ok(())
     }
@@ -314,21 +328,20 @@ impl NokeParser {
         Ok(())
     }
 
-    pub fn statement(input: Node) -> Result<Box<Statement>> {
-        Ok(match_nodes!(
-            input.into_children();
-            [assignment(stmt), _] => stmt,
-            [expression(expr), _] => Box::new(Statement::Expression(expr)),
-        ))
-    }
-
-    pub fn left_hand_side(input: Node) -> Result<Box<LeftHandSide>> {
+    pub fn declaration(input: Node) -> Result<Box<LeftHandSide>> {
         Ok(match_nodes!(
             input.into_children();
             [immutable(_), identifier(id), expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), false)),
             [immutable(_), identifier(id)] => Box::new(LeftHandSide::Declaration(id, None, false)),
             [mutable(_), identifier(id), expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), true)),
             [mutable(_), identifier(id)] => Box::new(LeftHandSide::Declaration(id, None, true)),
+        ))
+    }
+
+    pub fn left_hand_side(input: Node) -> Result<Box<LeftHandSide>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [declaration(decl)] => decl,
             [expression(expr)] => Box::new(LeftHandSide::Expression(expr)),
         ))
     }
@@ -337,6 +350,44 @@ impl NokeParser {
         Ok(match_nodes!(
             input.into_children();
             [left_hand_side(lhs), expression(expr)] => Box::new(Statement::Assignment(lhs, expr)),
+        ))
+    }
+
+    // Block
+
+    pub fn block(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [statement(stmts)..] => Box::new(Statement::Block(stmts.collect())),
+            [] => Box::new(Statement::Block(vec![])),
+        ))
+    }
+
+    // Branch
+
+    pub fn branch(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [expression(condition), statement(if_stmt)] => Box::new(Statement::Branch(condition, if_stmt, None)),
+            [expression(condition), statement(if_stmt), statement(else_stmt)] => Box::new(Statement::Branch(condition, if_stmt, Some(else_stmt))),
+        ))
+    }
+
+    // For loop
+
+    pub fn for_loop(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [assignment(init), _, expression(until), _, assignment(step), statement(body)] => Box::new(Statement::For(init, until, step, body)),
+            [assignment(init), _, expression(until), _, expression(step), statement(body)] => Box::new(Statement::For(
+                init,
+                until,
+                Box::new(Statement::LeftHandSide(
+                    Box::new(LeftHandSide::Expression(step))
+                )),
+                body
+            )),
+            [declaration(decl), expression(iterable), statement(body)] => Box::new(Statement::ForEach(decl, iterable, body)),
         ))
     }
 

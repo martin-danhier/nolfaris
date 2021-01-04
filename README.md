@@ -31,8 +31,8 @@ Here is a roadmap of the planned features:
       - [x] Structural (function call, list indexing, member access)
   - [ ] Statements
     - [x] Assignement
-    - [ ] Block
-    - [ ] Branchs
+    - [x] Block
+    - [x] Branchs
     - [ ] Loops
   - [ ] Structure
     - [ ] Functions
@@ -46,4 +46,8 @@ Here is a roadmap of the planned features:
 - [ ] Assembly to custom bytecode
   - [ ] Definition of custom bytecode
   - [ ] Assembler
+
+These side projects are planned for later as well:
+
 - [ ] Interpreter of custom bytecode
+- [ ] VSCode extension with a maximum of support for .idk files

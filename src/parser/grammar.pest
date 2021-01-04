@@ -132,7 +132,7 @@ postfix_operator = {
 // Identifier
 
 identifier = @{
-    !("not" | "or" | "and" | "typeof" | "true" | "false" | "let" | "mut") ~
+    !("not" | "or" | "and" | "typeof" | "true" | "false" | "let" | "mut" | "if" | "else" | "for" | "while" | "in") ~
     (ASCII_ALPHA | "_") ~ ( ASCII_ALPHANUMERIC | "_" )*
 }
 
@@ -144,7 +144,7 @@ identifier = @{
 // Add it to a specific rule in order to get it in the error messages when it is missing
 semicolon = { ";" }
 
-statement = { (assignment | expression) ~ semicolon }
+statement = { (assignment | left_hand_side) ~ semicolon | block | branch | for_loop }
 
 // Assignments
 
@@ -156,8 +156,28 @@ mutable = { "let" }
 immutable = { "const" }
 
 left_hand_side = {
-    ( mutable | immutable ) ~ identifier ~ (":" ~ expression)?
+    declaration
     | expression
 }
 
+declaration = { ( mutable | immutable ) ~ identifier ~ (":" ~ expression)? }
+
 assignment = { left_hand_side ~ "=" ~ expression }
+
+// Block
+
+// A block is a series of statements. Ex: the body of a loop
+
+block = { "{" ~ statement* ~ "}" }
+
+// Branches
+
+branch = { "if" ~ "(" ~ expression ~ ")" ~ statement ~ ( "else" ~ statement )? }
+
+// For loop
+
+
+for_loop = { "for" ~ "(" ~ ( 
+    assignment ~ semicolon ~ expression ~ semicolon ~  (assignment | expression)
+    | declaration ~ "in" ~ expression
+    ) ~ ")" ~ statement }
