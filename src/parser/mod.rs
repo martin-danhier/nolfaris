@@ -310,11 +310,13 @@ impl NokeParser {
     pub fn statement(input: Node) -> Result<Box<Statement>> {
         Ok(match_nodes!(
             input.into_children();
-            [assignment(stmt), _] => stmt,
+            [affectation(stmt), _] => stmt,
             [left_hand_side(lhs), _] => Box::new(Statement::LeftHandSide(lhs)),
+            [return_statement(stmt), _] => stmt,
             [block(b)] => b,
             [branch(b)] => b,
             [for_loop(stmt)] => stmt,
+            [while_loop(wl)] => wl,
         ))
     }
 
@@ -326,6 +328,13 @@ impl NokeParser {
 
     pub fn immutable(input: Node) -> Result<()> {
         Ok(())
+    }
+
+    pub fn param_declaration(input: Node) -> Result<Box<LeftHandSide>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [identifier(id), expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), true)),
+        ))
     }
 
     pub fn declaration(input: Node) -> Result<Box<LeftHandSide>> {
@@ -346,10 +355,33 @@ impl NokeParser {
         ))
     }
 
-    pub fn assignment(input: Node) -> Result<Box<Statement>> {
+    pub fn affectation_operator(input: Node) -> Result<AffectationOpcode> {
+        match input.as_str() {
+            "=" => Ok(AffectationOpcode::Affect),
+            "+=" => Ok(AffectationOpcode::AffSum),
+            "-=" => Ok(AffectationOpcode::AffSub),
+            "*=" => Ok(AffectationOpcode::AffMul),
+            "/=" => Ok(AffectationOpcode::AffDiv),
+            "%=" => Ok(AffectationOpcode::AffMod),
+            o => Err(input.error(format!("\"{:?}\" isn't an assignment operator.", o)))?
+        }
+    }
+
+    pub fn affectation(input: Node) -> Result<Box<Statement>> {
         Ok(match_nodes!(
             input.into_children();
-            [left_hand_side(lhs), expression(expr)] => Box::new(Statement::Assignment(lhs, expr)),
+            [left_hand_side(lhs), affectation_operator(op), expression(expr)] => Box::new(Statement::Affectation(Affectation{
+                left_hand_side: lhs,
+                op,
+                right_hand_side: expr
+            })),
+        ))
+    }
+
+    pub fn return_statement(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [expression(expr)] => Box::new(Statement::Return(expr)),
         ))
     }
 
@@ -368,8 +400,16 @@ impl NokeParser {
     pub fn branch(input: Node) -> Result<Box<Statement>> {
         Ok(match_nodes!(
             input.into_children();
-            [expression(condition), statement(if_stmt)] => Box::new(Statement::Branch(condition, if_stmt, None)),
-            [expression(condition), statement(if_stmt), statement(else_stmt)] => Box::new(Statement::Branch(condition, if_stmt, Some(else_stmt))),
+            [expression(condition), statement(if_stmt)] => Box::new(Statement::Branch(Branch{
+                condition: condition,
+                if_statement: if_stmt,
+                else_statement: None,
+            })),
+            [expression(condition), statement(if_stmt), statement(else_stmt)] => Box::new(Statement::Branch(Branch{
+                condition: condition,
+                if_statement: if_stmt,
+                else_statement: Some(else_stmt),
+            })),
         ))
     }
 
@@ -378,16 +418,99 @@ impl NokeParser {
     pub fn for_loop(input: Node) -> Result<Box<Statement>> {
         Ok(match_nodes!(
             input.into_children();
-            [assignment(init), _, expression(until), _, assignment(step), statement(body)] => Box::new(Statement::For(init, until, step, body)),
-            [assignment(init), _, expression(until), _, expression(step), statement(body)] => Box::new(Statement::For(
+            [affectation(init), _, expression(until), _, affectation(step), statement(body)] => Box::new(Statement::For(ForLoop {
+                init, until, step, body
+            })),
+            [affectation(init), _, expression(until), _, expression(step), statement(body)] => Box::new(Statement::For(ForLoop {
                 init,
                 until,
-                Box::new(Statement::LeftHandSide(
+                step: Box::new(Statement::LeftHandSide(
                     Box::new(LeftHandSide::Expression(step))
                 )),
                 body
-            )),
-            [declaration(decl), expression(iterable), statement(body)] => Box::new(Statement::ForEach(decl, iterable, body)),
+             })),
+            [declaration(decl), expression(iterable), statement(body)] => Box::new(Statement::ForEach(ForEachLoop{init: decl, iterable, body})),
+        ))
+    }
+
+    // While loop
+
+    pub fn while_loop(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [expression(condition), statement(body)] => Box::new(Statement::While(WhileLoop{condition, body})),
+        ))
+    }
+
+    // =========================
+    // == Structural elements ==
+    // =========================
+
+    /// Module
+    pub fn module(input: Node) -> Result<Box<StructuralElement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [identifier(id), structural_element(m)..] => Box::new(StructuralElement::Module(Module {
+                name: id,
+                body: m.collect(),
+            })),
+        ))
+    }
+
+    /// Function
+    pub fn function_def_parameters(input: Node) -> Result<Vec<Box<LeftHandSide>>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [param_declaration(others)..] => {
+                others.collect()
+            },
+        ))
+    }
+    pub fn function(input: Node) -> Result<Box<StructuralElement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [identifier(id), function_def_parameters(params), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: params,
+                return_type: None,
+                body: body,
+            })),
+            [identifier(id), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: vec![],
+                return_type: None,
+                body: body,
+            })),
+            [identifier(id), function_def_parameters(params), expression(return_type), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: params,
+                return_type: Some(return_type),
+                body: body,
+            })),
+            [identifier(id), expression(return_type),  block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: vec![],
+                return_type: Some(return_type),
+                body: body,
+            })),
+        ))
+    }
+
+    // Import
+
+    pub fn import(input: Node) -> Result<Box<StructuralElement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [expression(expr), _] => Box::new(StructuralElement::Import(expr)),
+        ))
+    }
+
+    pub fn structural_element(input: Node) -> Result<Box<StructuralElement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [module(m)] => m,
+            [function(f)] => f,
+            [import(i)] => i,
         ))
     }
 
@@ -395,15 +518,15 @@ impl NokeParser {
     // == Global file ==
     // =================
 
-    pub fn file(input: Node) -> Result<Vec<Box<Statement>>> {
+    pub fn file(input: Node) -> Result<Vec<Box<StructuralElement>>> {
         Ok(match_nodes!(
             input.into_children();
-            [statement(stmt).., _] => stmt.collect(),
+            [structural_element(structural).., _] => structural.collect(),
         ))
     }
 }
 
-pub fn parse_file(input_str: &str) -> Result<Vec<Box<Statement>>> {
+pub fn parse_file(input_str: &str) -> Result<Vec<Box<StructuralElement>>> {
     // Parse the input into `Nodes`
     let inputs = NokeParser::parse(Rule::file, input_str)?;
     // There should be a single root node in the parsed tree

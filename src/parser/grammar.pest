@@ -7,7 +7,7 @@ COMMENT = _{
 
 // == Global rule ==
 
-file = { SOI ~ statement* ~ EOI }
+file = { SOI ~ structural_element* ~ EOI }
 
 // =================
 // == Expressions ==
@@ -132,7 +132,8 @@ postfix_operator = {
 // Identifier
 
 identifier = @{
-    !("not" | "or" | "and" | "typeof" | "true" | "false" | "let" | "mut" | "if" | "else" | "for" | "while" | "in") ~
+    !("not" | "or" | "and" | "typeof" | "true" | "false" | "let" | "mut" | "if"
+    | "else" | "for" | "while" | "in" | "module" | "fun" | "return" | "import") ~
     (ASCII_ALPHA | "_") ~ ( ASCII_ALPHANUMERIC | "_" )*
 }
 
@@ -144,9 +145,9 @@ identifier = @{
 // Add it to a specific rule in order to get it in the error messages when it is missing
 semicolon = { ";" }
 
-statement = { (assignment | left_hand_side) ~ semicolon | block | branch | for_loop }
+statement = { (return_statement | affectation | left_hand_side) ~ semicolon | block | branch | for_loop | while_loop }
 
-// Assignments
+// affectations
 
 // What goes to the left of the =
 // An expression is too generic, a lot of matches will be invalid
@@ -160,9 +161,19 @@ left_hand_side = {
     | expression
 }
 
+// Declaration without prefix and with required type, used in functions
+param_declaration = { identifier ~ ":" ~ expression }
+
+// Variable declaration, with prefix, and optional type
 declaration = { ( mutable | immutable ) ~ identifier ~ (":" ~ expression)? }
 
-assignment = { left_hand_side ~ "=" ~ expression }
+affectation_operator = { "=" | "+=" | "-=" | "*=" | "/=" | "%=" }
+
+affectation = { left_hand_side ~ affectation_operator ~ expression }
+
+// Return statement
+
+return_statement = { "return" ~ expression }
 
 // Block
 
@@ -176,8 +187,41 @@ branch = { "if" ~ "(" ~ expression ~ ")" ~ statement ~ ( "else" ~ statement )? }
 
 // For loop
 
-
-for_loop = { "for" ~ "(" ~ ( 
-    assignment ~ semicolon ~ expression ~ semicolon ~  (assignment | expression)
+for_loop = { "for" ~ "(" ~ (
+    affectation ~ semicolon ~ expression ~ semicolon ~  (affectation | expression)
     | declaration ~ "in" ~ expression
     ) ~ ")" ~ statement }
+
+// While loop
+
+while_loop = { "while" ~ "(" ~ expression ~ ")" ~ statement }
+
+// ================
+// == Structural ==
+// ================
+
+// Structural elements are the things that are neither expressions nor statements,
+// but are used to structure the code in different parts.
+// It includes functions, modules, and files (since files are modules)
+
+structural_element = { import | function | module }
+
+// == Module ==
+// A module is a structural element containing other structural elements.
+// For example, a module may contain other modules and some functions.
+// A file is an implicit module
+
+module = { "module" ~ identifier ~ "{" ~ structural_element* ~ "}" }
+
+// == Function ==
+// A function is ... well I hope that you know
+
+function_def_parameters = { param_declaration ~ ( "," ~ param_declaration)* }
+
+function = { "fun" ~ identifier ~ "(" ~ function_def_parameters? ~ ")" ~ ( "->" ~ expression )? ~ block }
+
+// == Import ==
+// A import is a structural element that references a file or a specific content of a file.
+// It can be used to link multiple files together.
+
+import = { "import" ~ expression ~ semicolon }

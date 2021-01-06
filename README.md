@@ -29,14 +29,22 @@ Here is a roadmap of the planned features:
       - [x] Basic maths (+, -, *, /, %, ++, --)
       - [x] Logical (==, !=, and, or, not, <, >, <=, >=)
       - [x] Structural (function call, list indexing, member access)
-  - [ ] Statements
+  - [x] Statements
     - [x] Assignement
     - [x] Block
     - [x] Branchs
-    - [ ] Loops
+    - [x] Loops
   - [ ] Structure
+    - [x] Modules
     - [ ] Functions
-    - [ ] Multi-file support
+      - [x] Basic structure
+      - [x] Params
+      - [x] Return value
+      - [x] Returns
+      - [ ] Visibility
+      - [ ] Generics
+      - [ ] Default param values
+    - [x] Multi-file support
     - [ ] Structs
     - [ ] Enums
     - [ ] ... TBD

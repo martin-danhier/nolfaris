@@ -1,3 +1,51 @@
+// =========================
+// == STRUCTURAL ELEMENTS ==
+// =========================
+
+/// # Structural Element
+/// Structural elements are the things that are neither expressions nor statements,
+/// but are used to structure the code in different parts.
+///
+/// It includes functions, modules, and files (since files are modules)
+#[derive(Debug)]
+pub enum StructuralElement {
+    Module(Module),
+    Function(Function),
+    Import(Box<Expr>),
+}
+
+/// # Function
+///
+/// A function is a reusable block of code that can be
+/// called with certain parameters. 
+/// 
+/// A function also has
+/// a return type that specifies the type of the returned value.
+#[derive(Debug)]
+pub struct Function {
+    pub name: Box<Expr>,
+    pub params: Vec<Box<LeftHandSide>>,
+    pub body: Box<Statement>,
+    pub return_type: Option<Box<Expr>>,
+}
+
+/// # Module
+///
+/// A module is a structural element that contains other structural elements.
+///
+/// For example, a module can contain functions or other modules.
+///
+/// A file is an implicit module.
+#[derive(Debug)]
+pub struct Module {
+    pub name: Box<Expr>,
+    pub body: Vec<Box<StructuralElement>>
+}
+
+// =================
+// == EXPRESSIONS ==
+// =================
+
 /// Expression
 #[derive(Debug)]
 pub enum Expr {
@@ -53,18 +101,152 @@ pub enum BinOpcode {
     Nav, // .
 }
 
-/// Statement
+// ================
+// == STATEMENTS ==
+// ================
+
+/// # Statement
+///
+/// A statement is a element that executes a specific action.
+/// Each statement of a block is executed in from to to bottom.
+///
+/// ## Example
+///
+/// ```noke
+/// let a = 3 + 2;
+/// log("hello world");
+/// if (true) {
+///     return false;
+/// }
+/// ```
 #[derive(Debug)]
 pub enum Statement {
     LeftHandSide(Box<LeftHandSide>),
-    Assignment(Box<LeftHandSide>, Box<Expr>),
+    Affectation(Affectation),
+    Return(Box<Expr>),
     Block(Vec<Box<Statement>>),
-    /// condition, if statement, else statement
-    Branch(Box<Expr>, Box<Statement>, Option<Box<Statement>>),
+    Branch(Branch),
     /// init, until, step, body
-    For(Box<Statement>, Box<Expr>, Box<Statement>, Box<Statement>),
-    ForEach(Box<LeftHandSide>, Box<Expr>, Box<Statement>),
+    For(ForLoop),
+    ForEach(ForEachLoop),
+    While(WhileLoop),
 }
+
+/// # Affectation Opcode
+///
+/// Usable operator in an affectation.
+///
+/// See [Affectation] for more details.
+#[derive(Debug, Copy, Clone)]
+pub enum AffectationOpcode {
+    Affect, // =
+    AffSum, // +=
+    AffSub, // -=
+    AffMul, // *=
+    AffDiv, // /=
+    AffMod, // %=
+}
+
+/// # Affectation
+///
+/// An affectation is a statement that affects a value to a variable.
+///
+/// The operator defines a secondary action.
+///
+/// ```noke
+/// // Affectation
+/// let a = 0;
+/// // Addition affectation
+/// a += 5;
+/// // This is equivalent to:
+/// a = a + 5;
+/// ```
+#[derive(Debug)]
+pub struct Affectation {
+    pub left_hand_side: Box<LeftHandSide>,
+    pub op: AffectationOpcode,
+    pub right_hand_side: Box<Expr>,
+}
+
+/// # Branch
+///
+/// A branch is a statement that can test a condition and execute a specific
+/// block of code depending on the result.
+///
+/// ## Example
+///
+/// ```noke
+/// if (a == 2) {
+///     a = 8;
+///     log("first condition");
+/// }
+/// else log("nope");
+/// ```
+#[derive(Debug)]
+pub struct Branch {
+    pub condition: Box<Expr>,
+    pub if_statement: Box<Statement>,
+    pub else_statement: Option<Box<Statement>>,
+}
+
+/// # For loop
+///
+/// A for loop is a statement that can iterate over a block of code for a specific
+/// amount of iterations. The counter variable is initialised with the init statement,
+/// it is then incremented between each step using the step statement. The loop interates
+/// while the until condition is true.
+///
+/// ## Example
+///
+/// ```noke
+/// for (let i = 0; i < 10; i++) {
+///     log("i = " + i);
+/// }
+/// ```
+#[derive(Debug)]
+pub struct ForLoop {
+    pub init: Box<Statement>,
+    pub until: Box<Expr>,
+    pub step: Box<Statement>,
+    pub body: Box<Statement>,
+}
+
+/// # ForEach loop
+///
+/// A foreach loop is a statement that can iterate over a block of code for each value in an iterable.
+///
+/// ## Example
+///
+/// ```noke
+/// for (let elem in [0, 4, 7]) {
+///     log("elem = " + elem);
+/// }
+/// ```
+#[derive(Debug)]
+pub struct ForEachLoop {
+    pub init: Box<LeftHandSide>,
+    pub iterable: Box<Expr>,
+    pub body: Box<Statement>,
+}
+
+/// # While loop
+///
+/// A while loop is a statement that can iterate over a block of code while a condition is true.
+///
+/// ## Example
+///
+/// ```noke
+/// let i = 0;
+/// while (i < 10) {
+///     i += 1;
+/// }
+/// ```
+#[derive(Debug)]
+pub struct WhileLoop {
+    pub condition: Box<Expr>,
+    pub body: Box<Statement>,
+}
+
 /// Statement
 #[derive(Debug)]
 pub enum LeftHandSide {
