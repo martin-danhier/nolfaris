@@ -4,7 +4,7 @@
 
 Nolfaris is a command line utility which can be used in order to compile the NoKe programming language.
 
-NoKe is a strictly typed programming language designed to be used with the Arcadia Engine as a scripting language.
+NoKe is a strictly typed and programming language designed to be used with the Arcadia Engine as a scripting language. The language is also designed to facilitate its IDE integrations, and an official Visual Studio Code will be made to support syntax highlighting, autocompletion, linting, snippets, debugging etc.
 
 The compiler is written in Rust and uses Pest as a parser generator.
 
@@ -12,7 +12,7 @@ The compiler is written in Rust and uses Pest as a parser generator.
 
 Here is a roadmap of the planned features:
 
-- [ ] Parser
+- [x] Parser
   - [x] Expressions
     - [x] Literals
       - [x] Decimal int
@@ -34,20 +34,20 @@ Here is a roadmap of the planned features:
     - [x] Block
     - [x] Branchs
     - [x] Loops
-  - [ ] Structure
+  - [x] Structure
     - [x] Modules
-    - [ ] Functions
+    - [x] Functions
       - [x] Basic structure
       - [x] Params
       - [x] Return value
       - [x] Returns
-      - [ ] Visibility
-      - [ ] Generics
-      - [ ] Default param values
+      - [x] Visibility
+      - [x] Generics
+      - [x] Default param values
     - [x] Multi-file support
-    - [ ] Structs
-    - [ ] Enums
-    - [ ] ... TBD
+    - [x] Structs
+    - [x] Enums
+    - [x] Root statements
 - [ ] Semantic analysis
 - [ ] Serialization to 3AC
 - [ ] Optimization

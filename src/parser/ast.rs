@@ -3,30 +3,59 @@
 // =========================
 
 /// # Structural Element
-/// Structural elements are the things that are neither expressions nor statements,
-/// but are used to structure the code in different parts.
-///
-/// It includes functions, modules, and files (since files are modules)
+/// Structural elements are the things that are placed at a root of a module, but not inside functions.
+/// They are used to structure the code in different parts.
 #[derive(Debug)]
 pub enum StructuralElement {
     Module(Module),
     Function(Function),
     Import(Box<Expr>),
+    Struct(Struct),
+    Enum(Enumeration),
+    Statement(Box<Statement>),
+}
+
+/// # Struct
+///
+/// A struct is a bunch of variables (called fields) grouped together
+/// in a single one. Each variable can be accessed via its name using the nav operator.
+///
+/// A struct can have type parameters and a visibility.
+#[derive(Debug)]
+pub struct Struct {
+    pub name: Box<Expr>,
+    pub fields: Vec<Box<Statement>>,
+    pub type_params: Vec<Box<Expr>>,
+    pub public: bool,
+}
+
+/// # Enumeration
+///
+/// An enum is a set of named symbolic values, called variants.
+///
+/// An enum is private by default, but can be defined as public using the "pub" keyword.
+#[derive(Debug)]
+pub struct Enumeration {
+    pub name: Box<Expr>,
+    pub variants: Vec<Box<Expr>>,
+    pub public: bool,
 }
 
 /// # Function
 ///
 /// A function is a reusable block of code that can be
-/// called with certain parameters. 
-/// 
+/// called with certain parameters.
+///
 /// A function also has
 /// a return type that specifies the type of the returned value.
 #[derive(Debug)]
 pub struct Function {
     pub name: Box<Expr>,
-    pub params: Vec<Box<LeftHandSide>>,
+    pub params: Vec<Box<Statement>>,
     pub body: Box<Statement>,
     pub return_type: Option<Box<Expr>>,
+    pub type_params: Vec<Box<Expr>>,
+    pub public: bool,
 }
 
 /// # Module
@@ -77,7 +106,7 @@ pub enum PrefixOpcode {
 pub enum PostfixOpcode {
     Increment, // ++
     Decrement, // --
-    Call(Vec<Box<Expr>>), // (a)
+    Call(FunctionCall), // (a)
     Indexing(Vec<Box<Expr>>) // [a]
 }
 
@@ -99,6 +128,24 @@ pub enum BinOpcode {
     Eq,  // ==
     Neq, // !=
     Nav, // .
+}
+
+/// # Function call
+///
+/// A function call is an operation that consist on calling a function to execute the contained code
+/// using the given parameters. The parameters are values given between the parentheses, but there can be
+/// type parameters given between the angle brackets.
+///
+/// ## Example
+///
+/// ```noke
+/// display("hello");
+/// foo<Bar>(42);
+/// ```
+#[derive(Debug)]
+pub struct FunctionCall {
+    pub type_params: Vec<Box<Expr>>,
+    pub params: Vec<Box<Expr>>,
 }
 
 // ================

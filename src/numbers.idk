@@ -1,27 +1,8 @@
-import main;
-
-module main {
 
 
-    fun fibonacci(max: i32, mox: i32) -> bool {
-        let current = 1;
-        let previous = 1;
+const speed = 5;
+const position: Vec4;
 
-        if (current == 1) {
-            log("hé salut");
-        }
-
-        while (current < max) {
-            // Get the next item
-            current += previous;
-
-            // Set previous to what current was before
-            previous = current - previous;
-
-            display("-> " + current);
-        }
-
-        return true;
-    }
-
+fun update() {
+    display("hello");
 }

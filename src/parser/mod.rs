@@ -185,11 +185,20 @@ impl NokeParser {
 
     //  Function call and indexing
 
-    pub fn call(input: Node) -> Result<Vec<Box<Expr>>> {
+    pub fn call(input: Node) -> Result<PostfixOpcode> {
         Ok(match_nodes!(
             input.into_children();
-            [expression_list(params)] => params,
-            [] => vec![],
+            [type_expression_list(type_params), expression_list(params)] => PostfixOpcode::Call(FunctionCall {
+                params, type_params,
+            }),
+            [expression_list(params)] => PostfixOpcode::Call(FunctionCall {
+                params,
+                type_params: vec![],
+            }),
+            [type_expression_list(type_params)] => PostfixOpcode::Call(FunctionCall {
+                params: vec![],
+                type_params: type_params,
+            }),
         ))
     }
 
@@ -207,9 +216,6 @@ impl NokeParser {
             [expression(exp)..] => exp.collect()
         ))
     }
-
-
-
 
     // Expressions
 
@@ -230,7 +236,7 @@ impl NokeParser {
             "--" => Ok(PostfixOpcode::Decrement),
             _ => {
                 Ok(match_nodes!(input.into_children();
-                    [call(op)] => PostfixOpcode::Call(op),
+                    [call(op)] => op,
                     [indexing(op)] => PostfixOpcode::Indexing(op),
                 ))
             }
@@ -298,6 +304,46 @@ impl NokeParser {
         ))
     }
 
+    // Type expressions (used in types)
+
+    pub fn type_expression_list(input: Node) -> Result<Vec<Box<Expr>>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [type_expression(exprs)..] => exprs.collect(),
+        ))
+    }
+
+    pub fn type_expression_params(input: Node) -> Result<Vec<Box<Expr>>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [type_expression_list(type_params)] => type_params,
+        ))
+    }
+
+    pub fn type_unary_operation(input: Node) -> Result<Box<Expr>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [identifier(id), type_expression_params(type_params)] => Box::new(Expr::PostfixOp(
+                id, PostfixOpcode::Call(FunctionCall {
+                    type_params,
+                    params: vec![],
+                })
+            )),
+            [identifier(id)] => id,
+        ))
+    }
+
+    #[prec_climb(type_unary_operation, PRECCLIMBER)]
+    pub fn type_expression(l: Box<Expr>, op: Node, r: Box<Expr>) -> Result<Box<Expr>> {
+        match op.as_rule() {
+            Rule::nav => Ok(Box::new(Expr::BinOp(l, BinOpcode::Nav, r))),
+            // Fallback
+            r => Err(op.error(format!("Rule {:?} isn't an operator.", r)))?,
+        }
+    }
+
+
+
     // ================
     // == Statements ==
     // ================
@@ -333,16 +379,40 @@ impl NokeParser {
     pub fn param_declaration(input: Node) -> Result<Box<LeftHandSide>> {
         Ok(match_nodes!(
             input.into_children();
-            [identifier(id), expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), true)),
+            [identifier(id), type_expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), true)),
+        ))
+    }
+
+    pub fn param_default_value(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [identifier(id), type_expression(typ), expression(default)] => Box::new(Statement::Affectation(Affectation {
+                left_hand_side: Box::new(LeftHandSide::Declaration(id, Some(typ), true)),
+                right_hand_side: default,
+                op: AffectationOpcode::Affect,
+            })),
+            [identifier(id), expression(default)] => Box::new(Statement::Affectation(Affectation {
+                left_hand_side: Box::new(LeftHandSide::Declaration(id, None, true)),
+                right_hand_side: default,
+                op: AffectationOpcode::Affect,
+            })),
+        ))
+    }
+
+    pub fn param(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [param_declaration(decl)] => Box::new(Statement::LeftHandSide(decl)),
+            [param_default_value(def)] => def,
         ))
     }
 
     pub fn declaration(input: Node) -> Result<Box<LeftHandSide>> {
         Ok(match_nodes!(
             input.into_children();
-            [immutable(_), identifier(id), expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), false)),
+            [immutable(_), identifier(id), type_expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), false)),
             [immutable(_), identifier(id)] => Box::new(LeftHandSide::Declaration(id, None, false)),
-            [mutable(_), identifier(id), expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), true)),
+            [mutable(_), identifier(id), type_expression(typ)] => Box::new(LeftHandSide::Declaration(id, Some(typ), true)),
             [mutable(_), identifier(id)] => Box::new(LeftHandSide::Declaration(id, None, true)),
         ))
     }
@@ -458,14 +528,19 @@ impl NokeParser {
     }
 
     /// Function
-    pub fn function_def_parameters(input: Node) -> Result<Vec<Box<LeftHandSide>>> {
+    pub fn function_def_parameters(input: Node) -> Result<Vec<Box<Statement>>> {
         Ok(match_nodes!(
             input.into_children();
-            [param_declaration(others)..] => {
+            [param(others)..] => {
                 others.collect()
             },
         ))
     }
+
+    pub fn public(input:Node) -> Result<()> {
+        Ok(())
+    }
+
     pub fn function(input: Node) -> Result<Box<StructuralElement>> {
         Ok(match_nodes!(
             input.into_children();
@@ -474,24 +549,128 @@ impl NokeParser {
                 params: params,
                 return_type: None,
                 body: body,
+                type_params: vec![],
+                public: false,
             })),
             [identifier(id), block(body)] => Box::new(StructuralElement::Function(Function {
                 name: id,
                 params: vec![],
                 return_type: None,
                 body: body,
+                type_params: vec![],
+                public: false,
             })),
             [identifier(id), function_def_parameters(params), expression(return_type), block(body)] => Box::new(StructuralElement::Function(Function {
                 name: id,
                 params: params,
                 return_type: Some(return_type),
                 body: body,
+                type_params: vec![],
+                public: false,
             })),
             [identifier(id), expression(return_type),  block(body)] => Box::new(StructuralElement::Function(Function {
                 name: id,
                 params: vec![],
                 return_type: Some(return_type),
                 body: body,
+                type_params: vec![],
+                public: false,
+            })),
+            [identifier(id), type_expression_list(type_params), function_def_parameters(params), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: params,
+                return_type: None,
+                body: body,
+                type_params,
+                public: false,
+            })),
+            [identifier(id), type_expression_list(type_params), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: vec![],
+                return_type: None,
+                body: body,
+                type_params,
+                public: false,
+            })),
+            [identifier(id), type_expression_list(type_params), function_def_parameters(params), expression(return_type), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: params,
+                return_type: Some(return_type),
+                body: body,
+                type_params,
+                public: false,
+            })),
+            [identifier(id), type_expression_list(type_params), expression(return_type),  block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: vec![],
+                return_type: Some(return_type),
+                body: body,
+                type_params,
+                public: false,
+            })),
+            [public(_), identifier(id), function_def_parameters(params), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: params,
+                return_type: None,
+                body: body,
+                type_params: vec![],
+                public: true,
+            })),
+            [public(_), identifier(id), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: vec![],
+                return_type: None,
+                body: body,
+                type_params: vec![],
+                public: true,
+            })),
+            [public(_), identifier(id), function_def_parameters(params), expression(return_type), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: params,
+                return_type: Some(return_type),
+                body: body,
+                type_params: vec![],
+                public: true,
+            })),
+            [public(_), identifier(id), expression(return_type),  block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: vec![],
+                return_type: Some(return_type),
+                body: body,
+                type_params: vec![],
+                public: true,
+            })),
+            [public(_), identifier(id), type_expression_list(type_params), function_def_parameters(params), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: params,
+                return_type: None,
+                body: body,
+                type_params,
+                public: true,
+            })),
+            [public(_), identifier(id), type_expression_list(type_params), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: vec![],
+                return_type: None,
+                body: body,
+                type_params,
+                public: true,
+            })),
+            [public(_), identifier(id), type_expression_list(type_params), function_def_parameters(params), expression(return_type), block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: params,
+                return_type: Some(return_type),
+                body: body,
+                type_params,
+                public: true,
+            })),
+            [public(_), identifier(id), type_expression_list(type_params), expression(return_type),  block(body)] => Box::new(StructuralElement::Function(Function {
+                name: id,
+                params: vec![],
+                return_type: Some(return_type),
+                body: body,
+                type_params,
+                public: true,
             })),
         ))
     }
@@ -505,12 +684,96 @@ impl NokeParser {
         ))
     }
 
+    // Struct
+
+    pub fn struct_def(input: Node) -> Result<Box<StructuralElement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [identifier(id)] => Box::new(StructuralElement::Struct(Struct{
+                name: id,
+                fields: vec![],
+                public: false,
+                type_params: vec![],
+            })),
+            [identifier(id), function_def_parameters(fields)] => Box::new(StructuralElement::Struct(Struct{
+                name: id,
+                fields,
+                public: false,
+                type_params: vec![],
+            })),
+            [public(_), identifier(id)] => Box::new(StructuralElement::Struct(Struct{
+                name: id,
+                fields: vec![],
+                public: true,
+                type_params: vec![],
+            })),
+            [public(_), identifier(id), function_def_parameters(fields)] => Box::new(StructuralElement::Struct(Struct{
+                name: id,
+                fields,
+                public: true,
+                type_params: vec![],
+            })),
+            [identifier(id), type_expression_list(type_params)] => Box::new(StructuralElement::Struct(Struct{
+                name: id,
+                fields: vec![],
+                public: false,
+                type_params,
+            })),
+            [identifier(id), type_expression_list(type_params), function_def_parameters(fields)] => Box::new(StructuralElement::Struct(Struct{
+                name: id,
+                fields,
+                public: false,
+                type_params,
+            })),
+            [public(_), identifier(id), type_expression_list(type_params)] => Box::new(StructuralElement::Struct(Struct{
+                name: id,
+                fields: vec![],
+                public: true,
+                type_params,
+            })),
+            [public(_), identifier(id), type_expression_list(type_params), function_def_parameters(fields)] => Box::new(StructuralElement::Struct(Struct{
+                name: id,
+                fields,
+                public: true,
+                type_params,
+            })),
+        ))
+    }
+
+    // Enumerations
+
+    pub fn enumeration_variants(input: Node) -> Result<Vec<Box<Expr>>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [identifier(variants)..] => variants.collect(),
+        ))
+    }
+
+    pub fn enumeration(input: Node) -> Result<Box<StructuralElement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [public(_), identifier(name), enumeration_variants(variants)] => Box::new(StructuralElement::Enum(Enumeration {
+                name,
+                variants,
+                public: true,
+            })),
+            [identifier(name), enumeration_variants(variants)] => Box::new(StructuralElement::Enum(Enumeration {
+                name,
+                variants,
+                public: false,
+            })),
+        ))
+    }
+
     pub fn structural_element(input: Node) -> Result<Box<StructuralElement>> {
         Ok(match_nodes!(
             input.into_children();
             [module(m)] => m,
             [function(f)] => f,
             [import(i)] => i,
+            [struct_def(s)] => s,
+            [enumeration(e)] => e,
+            [statement(s)] => Box::new(StructuralElement::Statement(s)),
         ))
     }
 
