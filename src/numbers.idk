@@ -1,8 +1,4 @@
 
-
-const speed = 5;
-const position: Vec4;
-
-fun update() {
-    display("hello");
+fun coucou() {
+    $ra;
 }

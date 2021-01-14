@@ -13,6 +13,7 @@ pub enum StructuralElement {
     Struct(Struct),
     Enum(Enumeration),
     Statement(Box<Statement>),
+    Error,
 }
 
 /// # Struct
@@ -177,6 +178,9 @@ pub enum Statement {
     For(ForLoop),
     ForEach(ForEachLoop),
     While(WhileLoop),
+    // Avoid errors when empty
+    Empty,
+    Error,
 }
 
 /// # Affectation Opcode

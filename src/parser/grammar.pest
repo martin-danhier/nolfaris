@@ -158,7 +158,7 @@ identifier = @{
     !(
     // To check strict equality, first check if it begins as a reserved keyword...
     ("not" | "or" | "and" | "typeof" | "true" | "false" | "let" | "mut" | "if" | "enum"
-    | "else" | "for" | "while" | "in" | "module" | "fun" | "return" | "import" | "pub")
+    | "else" | "for" | "while" | "in" | "module" | "fun" | "return" | "import" | "pub" | "mod")
       // Then check that the word doesn't continue afterwards.
       // That prevent "integer" from matching because "in" is reserved
       ~ !(ASCII_ALPHANUMERIC | "_")
@@ -173,7 +173,7 @@ identifier = @{
 // Add it to a specific rule in order to get it in the error messages when it is missing
 semicolon = { ";" }
 
-statement = { (return_statement | affectation | left_hand_side) ~ semicolon | block | branch | for_loop | while_loop }
+statement = { (return_statement | affectation | left_hand_side | "") ~ semicolon | block | branch | for_loop | while_loop }
 
 // affectations
 
@@ -268,3 +268,15 @@ struct_def = { public? ~ "struct"  ~ identifier ~ ("<" ~ type_expression_list ~ 
 
 enumeration_variants = { identifier ~ ("," ~ identifier)* ~ ","? }
 enumeration = { public? ~ "enum" ~ identifier ~ "{" ~ enumeration_variants? ~ "}"}
+
+// == Error handling ==
+
+// The parser crashes when something is not matched.
+// When it occurs, it doesn't return the parse output, which means that only that error will be shown.
+// More, the parser may not have enough data to provide useful hints and error messages.
+// Thus, the following patterns are parsed in order to prevent the parsing from crashing.
+// They will be rejected in a later stage of compilation.
+
+err_unsupported_char = { 
+    ANY 
+}

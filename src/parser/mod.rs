@@ -1,15 +1,17 @@
 use pest::prec_climber as pcl;
-use pest_consume::{match_nodes, Error, Parser};
+use pest_consume::{match_nodes, Parser};
 use std::str::FromStr;
 
 // Import ast
 pub mod ast;
 use ast::*;
 
+use crate::error::{Error, ErrorLocation, ErrorVariant, InFileLocation, InFilePosition, Severity};
+
 // Custom types
 
 #[allow(dead_code)] // Rust incorrectly thinks that the typedef is not used
-type Result<T> = std::result::Result<T, Error<Rule>>;
+type Result<T> = std::result::Result<T, pest_consume::Error<Rule>>;
 #[allow(dead_code)]
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 
@@ -199,6 +201,10 @@ impl NokeParser {
                 params: vec![],
                 type_params: type_params,
             }),
+            [] => PostfixOpcode::Call(FunctionCall {
+                params: vec![],
+                type_params: vec![],
+            })
         ))
     }
 
@@ -234,12 +240,10 @@ impl NokeParser {
         match input.as_str() {
             "++" => Ok(PostfixOpcode::Increment),
             "--" => Ok(PostfixOpcode::Decrement),
-            _ => {
-                Ok(match_nodes!(input.into_children();
-                    [call(op)] => op,
-                    [indexing(op)] => PostfixOpcode::Indexing(op),
-                ))
-            }
+            _ => Ok(match_nodes!(input.into_children();
+                [call(op)] => op,
+                [indexing(op)] => PostfixOpcode::Indexing(op),
+            )),
         }
     }
 
@@ -342,8 +346,6 @@ impl NokeParser {
         }
     }
 
-
-
     // ================
     // == Statements ==
     // ================
@@ -351,7 +353,6 @@ impl NokeParser {
     pub fn semicolon(input: Node) -> Result<()> {
         Ok(())
     }
-
 
     pub fn statement(input: Node) -> Result<Box<Statement>> {
         Ok(match_nodes!(
@@ -363,6 +364,7 @@ impl NokeParser {
             [branch(b)] => b,
             [for_loop(stmt)] => stmt,
             [while_loop(wl)] => wl,
+            [semicolon(_)] => Box::new(Statement::Empty),
         ))
     }
 
@@ -433,7 +435,7 @@ impl NokeParser {
             "*=" => Ok(AffectationOpcode::AffMul),
             "/=" => Ok(AffectationOpcode::AffDiv),
             "%=" => Ok(AffectationOpcode::AffMod),
-            o => Err(input.error(format!("\"{:?}\" isn't an assignment operator.", o)))?
+            o => Err(input.error(format!("\"{:?}\" isn't an assignment operator.", o)))?,
         }
     }
 
@@ -537,7 +539,7 @@ impl NokeParser {
         ))
     }
 
-    pub fn public(input:Node) -> Result<()> {
+    pub fn public(input: Node) -> Result<()> {
         Ok(())
     }
 
@@ -774,8 +776,18 @@ impl NokeParser {
             [struct_def(s)] => s,
             [enumeration(e)] => e,
             [statement(s)] => Box::new(StructuralElement::Statement(s)),
+            [err_unsupported_char(c)] => c,
         ))
     }
+
+    // ====================
+    // == Error handling ==
+    // ====================
+
+    pub fn err_unsupported_char(input: Node) -> Result<Box<StructuralElement>> {
+        Ok(Box::new(StructuralElement::Error))
+    }
+
 
     // =================
     // == Global file ==
@@ -789,11 +801,162 @@ impl NokeParser {
     }
 }
 
-pub fn parse_file(input_str: &str) -> Result<Vec<Box<StructuralElement>>> {
+pub fn parse_file(input_str: &str) -> std::result::Result<Vec<Box<StructuralElement>>, Error> {
+    let result = parse_with_pest(input_str);
+
+    match result {
+        Ok(res) => Ok(res),
+        Err(err) => Err(Error::from_pest_error(
+            err,
+            String::from("src/numbers.idk"),
+            input_str,
+        )),
+    }
+}
+
+fn parse_with_pest(input_str: &str) -> Result<Vec<Box<StructuralElement>>> {
     // Parse the input into `Nodes`
     let inputs = NokeParser::parse(Rule::file, input_str)?;
     // There should be a single root node in the parsed tree
     let input = inputs.single()?;
     // Consume the `Node` recursively into the final value
     NokeParser::file(input)
+}
+
+pub fn rule_to_str(rule: Rule) -> Option<String> {
+    match rule {
+        Rule::statement => Some(String::from("Statement")),
+        Rule::expression
+        | Rule::binary_operation
+        | Rule::unary_operation
+        | Rule::term
+        | Rule::expression_list => Some(String::from("Expression")),
+        Rule::file | Rule::structural_element => Some(String::from(
+            "Structural Element (import, module, function, struct, enum or statement)",
+        )),
+        Rule::type_expression | Rule::type_unary_operation | Rule::type_expression_list => {
+            Some(String::from("Type"))
+        }
+        Rule::type_expression_params => Some(String::from("Type parameters")),
+        Rule::param => Some(String::from("Parameter")),
+        Rule::identifier => Some(String::from("Identifier")),
+
+        // Literals
+        Rule::dec_integer | Rule::hex_integer | Rule::bin_integer | Rule::integer => {
+            Some(String::from("Int literal"))
+        }
+        Rule::float => Some(String::from("Float literal")),
+        Rule::bool => Some(String::from("Bool literal")),
+        Rule::character | Rule::char => Some(String::from("Char literal")),
+        Rule::inner_string | Rule::string | Rule::inner_raw_string | Rule::raw_string => {
+            Some(String::from("String literal"))
+        }
+
+        // Operators
+        Rule::plus
+        | Rule::minus
+        | Rule::times
+        | Rule::div
+        | Rule::exponent
+        | Rule::modulo
+        | Rule::less_or_equal_to
+        | Rule::greater_or_equal_to
+        | Rule::less_than
+        | Rule::greater_than
+        | Rule::equals
+        | Rule::different
+        | Rule::and
+        | Rule::or
+        | Rule::nav
+        | Rule::binary_operator => Some(String::from("Binary operator")),
+        Rule::type_binary_operator => Some(String::from("Navigation operator \".\"")),
+        Rule::affectation_operator => Some(String::from("Affectation operator")),
+        Rule::prefix_operator => Some(String::from("Prefix operator")),
+        Rule::postfix_operator => Some(String::from(
+            "Postfix operator (including function calls and list indexes)",
+        )),
+        // Miscellaneous
+        Rule::semicolon => Some(String::from(";")),
+        Rule::block => Some(String::from("Block")),
+        Rule::EOI => Some(String::from("End of file")),
+        // Others, just use the enum name
+        _ => Some(format!("{:?}", rule)),
+    }
+}
+
+impl Error {
+    fn from_pest_error(err: pest::error::Error<Rule>, file_path: String, input_str: &str) -> Error {
+        let mut hint = None;
+        let message = match err.variant {
+            pest::error::ErrorVariant::CustomError { message } => message,
+            pest::error::ErrorVariant::ParsingError {
+                positives,
+                negatives: _,
+            } => {
+                // Filter the matching rules
+                let mut shown_rules = vec![];
+                for rule in positives {
+                    if let Some(rule_str) = rule_to_str(rule) {
+                        // Set the hint in common situations
+                        if rule == Rule::semicolon {
+                            hint = Some(String::from("Did you forget a semicolon ?"));
+                        } else if rule == Rule::EOI {
+                            hint = Some(String::from(
+                                "Did you forget an opening bracket or parenthese ?",
+                            ));
+                        } else if rule == Rule::statement {
+                            hint = Some(String::from("Did you forget a closing bracket ? Did you forget a loop or if condition ?"));
+                        } else if rule == Rule::param {
+                            hint = Some(String::from("Did you forget a closing parenthese ?"));
+                        } else if rule == Rule::block {
+                            hint = Some(String::from("Did you forget an opening parenthese ?"));
+                        }
+
+                        // Push the rule
+                        if !shown_rules.contains(&rule_str) {
+                            shown_rules.push(rule_str);
+                        }
+                    }
+                }
+
+                // Sort the rules
+                shown_rules.sort();
+
+                // Create the message
+                let mut msg = String::from("Expected one of the following:");
+                for rule in shown_rules {
+                    msg += &format!("\n\t-> {}", rule);
+                }
+                msg
+            }
+        };
+
+        let location = ErrorLocation {
+            file_path,
+            // Location in the file
+            location: match err.line_col {
+                pest::error::LineColLocation::Pos((l, c)) => {
+                    InFileLocation::Ponctual(InFilePosition { line: l, col: c })
+                }
+                pest::error::LineColLocation::Span((sl, sc), (el, ec)) => InFileLocation::Span(
+                    InFilePosition { line: sl, col: sc },
+                    InFilePosition { line: el, col: ec },
+                ),
+            },
+        };
+
+        let line_content = match input_str.lines().nth(location.get_start().line - 1) {
+            Some(l) => Some(String::from(l)),
+            None => None,
+        };
+
+        Error {
+            variant: ErrorVariant::Syntax,
+            location,
+            line_content,
+            message,
+            hint,
+            severity: Severity::Error,
+        }
+    }
 }
