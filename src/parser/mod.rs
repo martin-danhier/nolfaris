@@ -1,3 +1,5 @@
+use crate::error::{Error, ErrorVariant, Severity};
+use crate::utils::locations::{InFileLocation, InFilePosition, NodeLocation};
 use pest::prec_climber as pcl;
 use pest_consume::{match_nodes, Parser};
 use std::str::FromStr;
@@ -5,8 +7,6 @@ use std::str::FromStr;
 // Import ast
 pub mod ast;
 use ast::*;
-
-use crate::error::{Error, ErrorLocation, ErrorVariant, InFileLocation, InFilePosition, Severity};
 
 // Custom types
 
@@ -357,14 +357,25 @@ impl NokeParser {
     pub fn statement(input: Node) -> Result<Box<Statement>> {
         Ok(match_nodes!(
             input.into_children();
-            [affectation(stmt), _] => stmt,
-            [left_hand_side(lhs), _] => Box::new(Statement::LeftHandSide(lhs)),
-            [return_statement(stmt), _] => stmt,
+            [affectation(stmt), semicolon(_)] => stmt,
+            [left_hand_side(lhs), semicolon(_)] => Box::new(Statement::LeftHandSide(lhs)),
+            [return_statement(stmt), semicolon(_)] => stmt,
+            [affectation(stmt)] => Box::new(Statement::Error(SyntaxError::MissingSemicolon(stmt))),
+            [left_hand_side(lhs)] => Box::new(Statement::Error(SyntaxError::MissingSemicolon(Box::new(Statement::LeftHandSide(lhs))))),
+            [return_statement(stmt)] => Box::new(Statement::Error(SyntaxError::MissingSemicolon(stmt))),
             [block(b)] => b,
             [branch(b)] => b,
             [for_loop(stmt)] => stmt,
             [while_loop(wl)] => wl,
             [semicolon(_)] => Box::new(Statement::Empty),
+        ))
+    }
+
+    pub fn checked_statement(input: Node) -> Result<Box<Statement>> {
+        Ok(match_nodes!(
+            input.into_children();
+            [statement(stmt)] => stmt,
+            [err_unsupported_char(err)] => Box::new(Statement::Error(err)),
         ))
     }
 
@@ -459,11 +470,20 @@ impl NokeParser {
 
     // Block
 
+    pub fn op_curly_bracket(input: Node) -> Result<()> {
+        Ok(())
+    }
+    pub fn cl_curly_bracket(input: Node) -> Result<()> {
+        Ok(())
+    }
+
     pub fn block(input: Node) -> Result<Box<Statement>> {
         Ok(match_nodes!(
             input.into_children();
-            [statement(stmts)..] => Box::new(Statement::Block(stmts.collect())),
-            [] => Box::new(Statement::Block(vec![])),
+            [op_curly_bracket(_), checked_statement(stmts).., cl_curly_bracket(_) ] => Box::new(Statement::Block(stmts.collect())),
+            [op_curly_bracket(_), cl_curly_bracket(_) ] => Box::new(Statement::Block(vec![])),
+            [op_curly_bracket(_), checked_statement(stmts)..] => Box::new(Statement::Error(SyntaxError::UnclosedBlock(stmts.collect()))),
+            [op_curly_bracket(_)] => Box::new(Statement::Error(SyntaxError::UnclosedBlock(vec![]))),
         ))
     }
 
@@ -776,7 +796,7 @@ impl NokeParser {
             [struct_def(s)] => s,
             [enumeration(e)] => e,
             [statement(s)] => Box::new(StructuralElement::Statement(s)),
-            [err_unsupported_char(c)] => c,
+            [err_unsupported_char(c)] => Box::new(StructuralElement::Error(c)),
         ))
     }
 
@@ -784,10 +804,11 @@ impl NokeParser {
     // == Error handling ==
     // ====================
 
-    pub fn err_unsupported_char(input: Node) -> Result<Box<StructuralElement>> {
-        Ok(Box::new(StructuralElement::Error))
+    pub fn err_unsupported_char(input: Node) -> Result<SyntaxError> {
+        Ok(SyntaxError::UnsupportedChar(
+            input.as_str().chars().next().unwrap(),
+        ))
     }
-
 
     // =================
     // == Global file ==
@@ -825,7 +846,7 @@ fn parse_with_pest(input_str: &str) -> Result<Vec<Box<StructuralElement>>> {
 
 pub fn rule_to_str(rule: Rule) -> Option<String> {
     match rule {
-        Rule::statement => Some(String::from("Statement")),
+        Rule::statement | Rule::checked_statement => Some(String::from("Statement")),
         Rule::expression
         | Rule::binary_operation
         | Rule::unary_operation
@@ -877,6 +898,8 @@ pub fn rule_to_str(rule: Rule) -> Option<String> {
         )),
         // Miscellaneous
         Rule::semicolon => Some(String::from(";")),
+        Rule::cl_curly_bracket => Some(String::from("}")),
+        Rule::op_curly_bracket => Some(String::from("{")),
         Rule::block => Some(String::from("Block")),
         Rule::EOI => Some(String::from("End of file")),
         // Others, just use the enum name
@@ -931,7 +954,7 @@ impl Error {
             }
         };
 
-        let location = ErrorLocation {
+        let location = NodeLocation {
             file_path,
             // Location in the file
             location: match err.line_col {

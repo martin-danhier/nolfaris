@@ -13,7 +13,7 @@ pub enum StructuralElement {
     Struct(Struct),
     Enum(Enumeration),
     Statement(Box<Statement>),
-    Error,
+    Error(SyntaxError),
 }
 
 /// # Struct
@@ -180,7 +180,7 @@ pub enum Statement {
     While(WhileLoop),
     // Avoid errors when empty
     Empty,
-    Error,
+    Error(SyntaxError),
 }
 
 /// # Affectation Opcode
@@ -304,4 +304,15 @@ pub enum LeftHandSide {
     /// "var a : type". The type is optional. The declaration can be mutable or not
     Declaration(Box<Expr>, Option<Box<Expr>>, bool),
     Expression(Box<Expr>),
+}
+
+// ====================
+// == ERROR RECOVERY ==
+// ====================
+
+#[derive(Debug)]
+pub enum SyntaxError {
+   UnsupportedChar(char),
+   UnclosedBlock(Vec<Box<Statement>>),
+   MissingSemicolon(Box<Statement>),
 }

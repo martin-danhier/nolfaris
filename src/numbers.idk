@@ -1,4 +1,9 @@
 
-fun coucou() {
-    $ra;
+
+fun bonjour(){
+    if (salut){
+        display("hello")
+    }
+    display("world")
 }
+

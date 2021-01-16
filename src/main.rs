@@ -7,6 +7,8 @@ use parser::parse_file;
 
 pub mod error;
 
+pub mod utils;
+
 fn main() {
 
     println!("\n\n\n\n\n\n");
