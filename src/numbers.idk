@@ -1,9 +1,15 @@
 
 
-fun bonjour(){
+fun bonjour() -> int {
     if (salut){
-        display("hello")
+        display("hello");
     }
-    display("world")
-}
+    display("world");
 
+    for (let i = 0; i < 4; i++) {
+        let a = i * 8;
+        display(a);
+    }
+
+    return 0;
+}

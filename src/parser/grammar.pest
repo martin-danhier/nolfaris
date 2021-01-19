@@ -40,7 +40,7 @@ type_expression_list = { type_expression ~ ("," ~ type_expression)* }
 type_expression_params = { "<" ~ type_expression_list ~ ">" }
 
 
-term = {float | integer | bool | char | raw_string | string | identifier  | indexing | "(" ~ expression ~ ")"}
+term = {float | integer | bool | char | raw_string | string | identifier  | list_access | "(" ~ expression ~ ")"}
 
 
 // == Literals ==
@@ -135,7 +135,7 @@ increment = _{ "++" }
 decrement = _{ "--" }
 type_of = _{"typeof"}
 call = { ("<" ~ type_expression_list ~ ">")? ~ "(" ~ expression_list? ~ ")" }
-indexing = { "[" ~ expression_list? ~ "]" }
+list_access = { "[" ~ expression_list? ~ "]" }
 
 prefix_operator = {
     decrement
@@ -149,7 +149,7 @@ postfix_operator = {
     decrement
     | increment
     | call
-    | indexing
+    | list_access
 }
 
 // Identifier
@@ -193,14 +193,14 @@ left_hand_side = {
 
 // Declaration without prefix and with required type, used in functions
 param_declaration = { identifier ~ ":" ~ type_expression }
-param_default_value = { identifier ~ (":" ~ type_expression)? ~ "=" ~ expression }
+param_default_value = { identifier ~ (":" ~ type_expression)? ~ affectation_operator ~ expression }
 param = { param_default_value | param_declaration }
 
 // Variable declaration, with prefix, and optional type
 declaration = { ( mutable | immutable ) ~ identifier ~ (":" ~ type_expression)? }
 
-affectation_operator = { "=" | "+=" | "-=" | "*=" | "/=" | "%=" }
 
+affectation_operator = { "=" | "+=" | "-=" | "*=" | "/=" | "%=" }
 affectation = { left_hand_side ~ affectation_operator ~ expression }
 
 // Return statement
